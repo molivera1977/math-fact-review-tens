@@ -6,7 +6,7 @@
     <title>Mr. O's Math Review: Multiples of 10</title>
     <style>
         :root {
-            --primary-color: #2980b9; /* Slightly darker blue for differentiation */
+            --primary-color: #2980b9; 
             --success-color: #27ae60;
             --danger-color: #c0392b;
             --purple-color: #8e44ad;
@@ -17,7 +17,6 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            /* New Gradient to distinguish from the standard version */
             background: linear-gradient(135deg, #3498db 0%, #8e44ad 100%);
             color: #333;
             display: flex;
@@ -95,7 +94,7 @@
         .mode-card.div:hover { background-color: #fff8f0; }
 
         .symbol-icon {
-            font-size: 4rem; /* Slightly smaller to fit text */
+            font-size: 4rem; 
             line-height: 1;
             margin-bottom: 10px;
             font-weight: bold;
@@ -229,7 +228,7 @@
         input[type="number"] {
             font-size: 2.5rem;
             padding: 10px;
-            width: 180px; /* Slightly wider for 3 digit answers */
+            width: 180px; 
             text-align: center;
             border: 3px solid #ddd;
             border-radius: 15px;
@@ -366,6 +365,7 @@
         maxFactor: 0,
         answer: 0,
         score: { correct: 0, wrong: 0 },
+        processing: false, // Prevents double scoring
         timer: {
             active: false,
             seconds: 180, 
@@ -460,6 +460,7 @@
         state.maxFactor = max;
         state.score.correct = 0;
         state.score.wrong = 0;
+        state.processing = false; // Reset lock
         state.timer.active = ui.timerToggle.checked;
         state.timer.seconds = 180; 
 
@@ -496,27 +497,26 @@
         }
     }
 
-    // --- Step 3: Game Logic (UPDATED FOR MULTIPLES OF 10) ---
+    // --- Step 3: Game Logic (UPDATED FOR SCORING FIX) ---
     function generateQuestion() {
+        // UNLOCK processing
+        state.processing = false;
+        
         ui.input.value = '';
         ui.input.focus();
         ui.feedback.innerText = '';
         ui.feedback.className = 'feedback';
 
-        // 1. Pick the base single digit (e.g., 4)
         const range = state.maxFactor - state.minFactor + 1;
         const baseNum = Math.floor(Math.random() * range) + state.minFactor;
 
-        // 2. Pick the multiple of 10 (e.g., 10, 20, 30 ... 120)
-        // logic: (Random 1-12) * 10
+        // Logic: (Random 1-12) * 10
         const multipleOfTen = (Math.floor(Math.random() * 12) + 1) * 10;
 
         if (state.mode === 'multiplication') {
-            // Question: 4 * 60 = ?
             state.answer = baseNum * multipleOfTen;
             ui.problem.innerHTML = `${baseNum} &times; ${multipleOfTen} =`;
         } else {
-            // Division: 240 / 4 = ? (Answer is 60)
             const dividend = baseNum * multipleOfTen;
             state.answer = multipleOfTen;
             ui.problem.innerHTML = `${dividend} &div; ${baseNum} =`;
@@ -524,18 +524,23 @@
     }
 
     function checkAnswer() {
-        if (ui.input.disabled) return;
+        // Prevent interaction if already processing correct answer
+        if (state.processing || ui.input.disabled) return;
 
         const val = parseInt(ui.input.value);
         if (isNaN(val)) return;
 
         if (val === state.answer) {
+            // LOCK on correct answer
+            state.processing = true;
+
             state.score.correct++;
             ui.scoreCorrect.innerText = state.score.correct;
             ui.feedback.innerText = "Correct!";
             ui.feedback.className = "feedback correct";
             setTimeout(generateQuestion, 800);
         } else {
+            // Do NOT lock on incorrect (allow retry)
             state.score.wrong++;
             ui.scoreWrong.innerText = state.score.wrong;
             ui.feedback.innerText = "Try again!";
@@ -545,7 +550,10 @@
     }
 
     function handleEnter(e) {
-        if (e.key === "Enter") checkAnswer();
+        if (e.key === "Enter") {
+            e.preventDefault(); // Prevent default form behavior
+            checkAnswer();
+        }
     }
 
     // --- Timer Logic ---

@@ -254,6 +254,26 @@
         }
         .history-table th { background-color: #f8f9fa; color: #555; border-radius: 5px;}
 
+        /* --- Student login --- */
+        .login-box { max-width: 380px; margin: 25px auto 10px; text-align: left; }
+        .login-box label { display: block; font-weight: bold; color: #555; margin: 14px 0 6px; }
+        .login-box select,
+        .login-box input[type="password"],
+        .login-box input[type="text"] {
+            width: 100%; box-sizing: border-box; font-size: 1.1rem; padding: 12px 14px;
+            border: 3px solid #ddd; border-radius: 12px; outline: none; font-family: inherit; background: white;
+        }
+        .login-box select:focus, .login-box input:focus { border-color: var(--primary-color); }
+        .sign-in-btn { background-color: var(--success-color); width: 100%; margin: 18px 0 0; }
+        .login-error { color: var(--danger-color); font-weight: bold; min-height: 24px; margin-top: 12px; text-align: center; }
+        .student-bar {
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+            background: #f8f9fa; border: 1px solid #eee; border-radius: 50px;
+            padding: 8px 10px 8px 20px; margin: 10px 0 5px; color: #555; font-weight: 500;
+        }
+        .student-bar strong { color: #2c3e50; }
+        .btn-switch { background: none; border: none; color: #888; cursor: pointer; font-size: 0.9rem; text-decoration: underline; font-family: inherit; }
+
         .hidden { display: none !important; }
         
         @media (max-width: 600px) {
@@ -276,7 +296,33 @@
     <h1 id="main-title">Mr. O's Fact Review</h1>
     <h2 style="font-size: 1.1rem; color: #2980b9;">Multiples of 10 Edition</h2>
 
-    <div id="welcome-screen">
+    <div id="login-screen">
+        <p style="font-size: 1.2rem; color: #666;">Sign in so Mr. O can see your progress!</p>
+        <div class="login-box">
+            <label for="name-select">👤 Select your name:</label>
+            <select id="name-select" onchange="onNameSelect()">
+                <option value="">-- Choose your name --</option>
+            </select>
+            <div id="pin-section" class="hidden">
+                <label for="student-pin" id="pin-label">🔒 Enter your student number:</label>
+                <input type="password" id="student-pin" placeholder="Student number…"
+                       onkeydown="if(event.key==='Enter') attemptLogin()" autocomplete="new-password">
+                <div id="guest-name-section" class="hidden">
+                    <label for="guest-display-name">✏️ Enter your first name:</label>
+                    <input type="text" id="guest-display-name" placeholder="e.g. Henry" maxlength="20"
+                           onkeydown="if(event.key==='Enter') attemptLogin()">
+                </div>
+                <button class="btn sign-in-btn" onclick="attemptLogin()">✅ Sign In</button>
+            </div>
+            <div class="login-error" id="login-error"></div>
+        </div>
+    </div>
+
+    <div id="welcome-screen" class="hidden">
+        <div class="student-bar">
+            <span>👋 Hi, <strong id="student-name-display"></strong>! Your practice is saved for Mr. O.</span>
+            <button class="btn-switch" onclick="signOut()">Not you?</button>
+        </div>
         <p style="font-size: 1.2rem; color: #666;">Select a mode to begin:</p>
         
         <div class="mode-container">
@@ -368,6 +414,7 @@
 
     // --- DOM Elements ---
     const screens = {
+        login: document.getElementById('login-screen'),
         welcome: document.getElementById('welcome-screen'),
         selection: document.getElementById('selection-screen'),
         practice: document.getElementById('practice-screen')
@@ -455,6 +502,7 @@
         state.processing = false; 
         state.timer.active = ui.timerToggle.checked;
         state.timer.seconds = 180; 
+        factsBeginSession();
 
         ui.scoreCorrect.innerText = '0';
         ui.scoreWrong.innerText = '0';
@@ -513,6 +561,7 @@
             state.answer = multipleOfTen;
             ui.problem.innerHTML = `${dividend} &div; ${baseNum} =`;
         }
+        state.problemText = ui.problem.textContent.replace(/\s*=\s*$/, '');
     }
 
     function checkAnswer() {
@@ -524,6 +573,7 @@
 
         // LOCK immediately
         state.processing = true;
+        factsRecordAnswer(val === state.answer, val);
 
         if (val === state.answer) {
             state.score.correct++;
@@ -596,6 +646,7 @@
         ui.feedback.className = "feedback final";
 
         saveHistory();
+        factsSubmit(true);
     }
 
     function saveHistory() {
@@ -657,6 +708,205 @@
         ui.historyList.innerHTML = html;
     }
 
+</script>
+
+<script>
+    // ═══════════════════════════════════════════════════
+    //  STUDENT LOGIN + SAVED PROGRESS
+    //  Each practice session is sent to Mr. O's Google Sheet and
+    //  shows up in the Teacher Dashboard → 🧮 Fact Fluency.
+    // ═══════════════════════════════════════════════════
+    const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzv8CWv1yyi8NeH04now9UxVL4IZm5yMqqsEGMcgGdrcAOWVB-aSp5siTvSSJXIUpzFMA/exec';
+    const GAME_KEY  = 'facts-tens';
+    const LOGIN_KEY = 'facts_student_v1';
+    const PARTIAL_EVERY = 5; // save an in-progress row every 5 answers
+
+    // ⚠️ ROSTER SYNC — keep identical to the Teacher Dashboard ROSTER
+    // and every other student-facing activity.
+    const ROSTER = [
+        { name: "Mr. O (Teacher)",           id: "9377" },
+        { name: "Avery, Jo'Von",             id: "10053632" },
+        { name: "Belasquez Bonilla, Eduin",  id: "10058674" },
+        { name: "Castaneda, Kelvin",         id: "10053248" },
+        { name: "Chicas-Santos, Allison",    id: "10066737" },
+        { name: "Collado, Roniel",           id: "10060249" },
+        { name: "Dejesus, Michael",          id: "10049434" },
+        { name: "Dock, Fakeem",              id: "10059720" },
+        { name: "Douglas, Iyana",            id: "10070980" },
+        { name: "Dumphrey, Christopher",     id: "10060696" },
+        { name: "Flores, Kiara",             id: "10052834" },
+        { name: "Garcia, Ariana",            id: "10045361" },
+        { name: "Johnson, Destiny",          id: "10052926" },
+        { name: "Jones, Tahji",              id: "10060315" },
+        { name: "Lawrence, Eric",            id: "10057451" },
+        { name: "Madero, Jovany",            id: "10076374" },
+        { name: "Pettway, Lanaura",          id: "10060616" },
+        { name: "Polanco Soriano, Thiara",   id: "10060503" },
+        { name: "Rivera, Adrianna",          id: "10045661" },
+        { name: "Roberts, Robyn",            id: "10060925" },
+        { name: "Rojas, Alanie",             id: "10076388" },
+        { name: "Sanchez Rodriguez, Johanelyz", id: "10076767" },
+        { name: "Vega, Taishmara",           id: "10054043" },
+        { name: "Watts, Autumn",             id: "10039032" },
+        { name: "Zelaya-Osorto, Nazareth",   id: "10053626" }
+    ];
+
+    const GUEST_SLOTS = {
+        '937701': 'Guest 1', '937702': 'Guest 2', '937703': 'Guest 3',
+        '937704': 'Guest 4', '937705': 'Guest 5', '937706': 'Guest 6',
+        '937707': 'Guest 7', '937708': 'Guest 8', '937709': 'Guest 9',
+        '937710': 'Guest 10'
+    };
+
+    let studentName = '';
+    let session = null; // { id, form, started, missed, answered, sent }
+
+    (function buildRoster() {
+        const sel = document.getElementById('name-select');
+        ROSTER.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.name; o.textContent = s.name;
+            sel.appendChild(o);
+        });
+        const div = document.createElement('option');
+        div.disabled = true; div.textContent = '── Guest Slots ──';
+        sel.appendChild(div);
+        Object.entries(GUEST_SLOTS).forEach(([code, label]) => {
+            const o = document.createElement('option');
+            o.value = `GUEST:${code}`; o.textContent = `🙋 ${label}`;
+            sel.appendChild(o);
+        });
+    })();
+
+    function onNameSelect() {
+        const val = document.getElementById('name-select').value;
+        const isGuest = val.startsWith('GUEST:');
+        document.getElementById('login-error').textContent = '';
+        document.getElementById('pin-section').classList.toggle('hidden', !val);
+        document.getElementById('guest-name-section').classList.toggle('hidden', !isGuest);
+        document.getElementById('pin-label').textContent = isGuest
+            ? '🔒 Enter guest code:' : '🔒 Enter your student number:';
+        if (val) setTimeout(() => document.getElementById('student-pin').focus(), 80);
+    }
+
+    function attemptLogin() {
+        const selVal = document.getElementById('name-select').value;
+        const pin    = document.getElementById('student-pin').value.trim();
+        const errEl  = document.getElementById('login-error');
+        errEl.textContent = '';
+
+        if (!selVal) { errEl.textContent = '⚠️ Please select your name.'; return; }
+        if (!pin)    { errEl.textContent = '⚠️ Please enter your student number.'; return; }
+
+        let displayName = '';
+        if (selVal.startsWith('GUEST:')) {
+            if (pin !== selVal.replace('GUEST:', '')) { errEl.textContent = '❌ Incorrect guest code. Try again.'; return; }
+            const firstName = document.getElementById('guest-display-name').value.trim();
+            if (!firstName) { errEl.textContent = '⚠️ Please enter your first name.'; return; }
+            displayName = firstName + ' (Guest)';
+        } else {
+            const student = ROSTER.find(s => s.name === selVal);
+            if (!student || student.id !== pin) { errEl.textContent = '❌ Incorrect student number. Try again.'; return; }
+            displayName = selVal;
+        }
+
+        document.getElementById('student-pin').value = '';
+        signIn(displayName);
+    }
+
+    function signIn(name) {
+        studentName = name;
+        try { sessionStorage.setItem(LOGIN_KEY, name); } catch (e) {}
+        document.getElementById('student-name-display').textContent = name.includes(',')
+            ? name.split(',')[1].trim() + ' ' + name.split(',')[0].trim()
+            : name;
+        state.history = [];
+        ui.historyList.innerHTML = '<p style="text-align: center; color: #bbb; font-style: italic;">No practice yet today.</p>';
+        showScreen('welcome');
+    }
+
+    function signOut() {
+        studentName = '';
+        try { sessionStorage.removeItem(LOGIN_KEY); } catch (e) {}
+        document.getElementById('name-select').value = '';
+        document.getElementById('guest-display-name').value = '';
+        onNameSelect();
+        showScreen('login');
+    }
+
+    // ── Session tracking (called from the practice logic) ──
+    function describeSet() {
+        const op = state.mode === 'multiplication' ? 'Mult' : 'Div';
+        let set;
+        if (state.minFactor === state.maxFactor) set = `${state.minFactor}s`;
+        else if (state.minFactor === 2 && state.maxFactor === 12) set = 'All 2-12';
+        else set = `Mixed ${state.minFactor}-${state.maxFactor}`;
+        return `${op} · ${set}` + (state.timer.active ? ' · Timed' : '');
+    }
+
+    function factsBeginSession() {
+        const started = Date.now();
+        session = {
+            id: `F-${started}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+            form: describeSet(),
+            started,
+            missed: [],
+            answered: 0,
+            sent: false
+        };
+    }
+
+    function factsRecordAnswer(isCorrect, typed) {
+        if (!session) return;
+        session.answered++;
+        if (!isCorrect) {
+            const entry = `${state.problemText} (${typed})`;
+            if (!session.missed.includes(entry)) session.missed.push(entry);
+        }
+        if (session.answered % PARTIAL_EVERY === 0) factsSubmit(false);
+    }
+
+    function factsSubmit(done) {
+        if (!session || session.sent || !studentName) return;
+        const correct = state.score.correct;
+        const wrong   = state.score.wrong;
+        if (correct + wrong === 0) return;
+        if (done) session.sent = true;
+        const total = correct + wrong;
+        fetch(SHEET_URL, {
+            method: 'POST', mode: 'no-cors', keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action:         'submit',
+                game:           GAME_KEY,
+                sessionId:      session.id,
+                name:           studentName,
+                form:           session.form,
+                score:          correct,
+                correct:        correct,
+                total:          total,
+                percent:        Math.round((correct / total) * 100),
+                done:           done,
+                elapsed:        Math.round((Date.now() - session.started) / 1000),
+                tabSwitches:    0,
+                wrongQuestions: session.missed.join(' | ')
+            })
+        }).catch(() => {});
+    }
+
+    // Closing the tab mid-practice still saves what they did.
+    window.addEventListener('pagehide', () => {
+        if (!screens.practice.classList.contains('hidden')) factsSubmit(true);
+    });
+
+    // ── Start on the login screen unless this tab is already signed in ──
+    (function initLogin() {
+        let saved = '';
+        try { saved = sessionStorage.getItem(LOGIN_KEY) || ''; } catch (e) {}
+        const known = ROSTER.some(s => s.name === saved) || saved.endsWith(' (Guest)');
+        if (saved && known) signIn(saved);
+        else showScreen('login');
+    })();
 </script>
 
 </body>

@@ -274,6 +274,8 @@
         .student-bar strong { color: #2c3e50; }
         .btn-switch { background: none; border: none; color: #888; cursor: pointer; font-size: 0.9rem; text-decoration: underline; font-family: inherit; }
 
+        .login-art { margin: 20px 0 10px; }
+
         .hidden { display: none !important; }
         
         @media (max-width: 600px) {
@@ -297,6 +299,19 @@
     <h2 style="font-size: 1.1rem; color: #2980b9;">Multiples of 10 Edition</h2>
 
     <div id="login-screen">
+        <div class="mode-container login-art">
+            <div class="mode-card mult" onclick="signInFirst()">
+                <div class="symbol-icon">&times;10</div>
+                <div class="mode-label">Multiply</div>
+                <div class="symbol-subtext">e.g. 4 &times; 60</div>
+            </div>
+
+            <div class="mode-card div" onclick="signInFirst()">
+                <div class="symbol-icon">&divide;</div>
+                <div class="mode-label">Divide</div>
+                <div class="symbol-subtext">e.g. 240 &divide; 4</div>
+            </div>
+        </div>
         <p style="font-size: 1.2rem; color: #666;">Sign in so Mr. O can see your progress!</p>
         <div class="login-box">
             <label for="name-select">👤 Select your name:</label>
@@ -823,6 +838,12 @@
         state.history = [];
         ui.historyList.innerHTML = '<p style="text-align: center; color: #bbb; font-style: italic;">No practice yet today.</p>';
         showScreen('welcome');
+    }
+
+    function signInFirst() {
+        const sel = document.getElementById('name-select');
+        sel.focus();
+        document.getElementById('login-error').textContent = '👆 Sign in first, then pick a mode!';
     }
 
     function signOut() {

@@ -277,6 +277,29 @@
 
         .login-art { margin: 20px 0 10px; }
 
+        /* --- Answer style (type it / multiple choice) --- */
+        .style-card .symbol-icon { font-size: 3.5rem; }
+        .style-card.type-it { border-color: var(--teal-color); }
+        .style-card.type-it:hover { background-color: #effbf8; }
+        .style-card.choice { border-color: var(--purple-color); }
+        .style-card.choice:hover { background-color: #f7f0fb; }
+        .style-sub { font-size: 0.85rem; color: #888; margin-top: 4px; }
+
+        .choice-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
+            max-width: 360px; margin: 0 auto;
+        }
+        .choice-btn {
+            font-size: 2rem; font-weight: 800; padding: 16px 0; border-radius: 15px;
+            border: 3px solid #ddd; background: white; color: #333; cursor: pointer;
+            transition: transform 0.15s, border-color 0.15s, background-color 0.15s;
+            font-family: inherit;
+        }
+        .choice-btn:hover:not(:disabled) { border-color: var(--primary-color); transform: translateY(-2px); }
+        .choice-btn:disabled { cursor: default; }
+        .choice-btn.right { background: #eafaf1; border-color: var(--success-color); color: var(--success-color); }
+        .choice-btn.wrong { background: #fdecea; border-color: var(--danger-color); color: var(--danger-color); }
+
         .hidden { display: none !important; }
         
         @media (max-width: 600px) {
@@ -386,6 +409,23 @@
         <button class="btn btn-nav" onclick="goHome()">Back to Menu</button>
     </div>
 
+    <div id="style-screen" class="hidden">
+        <h2 id="style-title">How do you want to answer?</h2>
+        <div class="mode-container">
+            <div class="mode-card style-card type-it" onclick="chooseAnswerStyle('type')">
+                <div class="symbol-icon">⌨️</div>
+                <div class="mode-label">Type It</div>
+                <div class="style-sub">Type each answer</div>
+            </div>
+            <div class="mode-card style-card choice" onclick="chooseAnswerStyle('choice')">
+                <div class="symbol-icon">🔘</div>
+                <div class="mode-label">Multiple Choice</div>
+                <div class="style-sub">Pick from 4 answers</div>
+            </div>
+        </div>
+        <button class="btn btn-nav" onclick="showScreen('selection')">Back</button>
+    </div>
+
     <div id="practice-screen" class="hidden">
         <div class="stats-bar">
             <div class="timer-box" id="timer-display">--:--</div>
@@ -402,6 +442,7 @@
         <br>
         
         <button id="check-btn" class="btn btn-check" onclick="checkAnswer()">Check Answer</button>
+        <div class="choice-grid hidden" id="choice-grid"></div>
         <div class="feedback" id="feedback"></div>
         <br>
         
@@ -433,6 +474,7 @@
         login: document.getElementById('login-screen'),
         welcome: document.getElementById('welcome-screen'),
         selection: document.getElementById('selection-screen'),
+        style: document.getElementById('style-screen'),
         practice: document.getElementById('practice-screen')
     };
     
@@ -491,7 +533,7 @@
             btn.className = 'mixed-btn';
             if (range.isAll) btn.classList.add('mixed-all');
             
-            btn.onclick = () => startPractice(range.min, range.max);
+            btn.onclick = () => pickSet(range.min, range.max);
             ui.mixedGrid.appendChild(btn);
         });
 
@@ -501,7 +543,7 @@
             btn.innerText = i;
             btn.className = 'num-btn';
             if (mode === 'division') btn.classList.add('div-mode');
-            btn.onclick = () => startPractice(i, i);
+            btn.onclick = () => pickSet(i, i);
             ui.numGrid.appendChild(btn);
         }
 
@@ -579,6 +621,7 @@
             ui.problem.innerHTML = `${dividend} &div; ${baseNum} =`;
         }
         state.problemText = ui.problem.textContent.replace(/\s*=\s*$/, '');
+        if (state.answerStyle === 'choice') renderChoices();
     }
 
     function checkAnswer() {
@@ -650,6 +693,7 @@
 
         ui.input.disabled = true;
         ui.checkBtn.classList.add('hidden');
+        document.getElementById('choice-grid').classList.add('hidden');
         ui.finishBtn.classList.add('hidden');
         ui.homeBtn.classList.remove('hidden');
 
@@ -861,7 +905,72 @@
         if (state.minFactor === state.maxFactor) set = `${state.minFactor}s`;
         else if (state.minFactor === 2 && state.maxFactor === 12) set = 'All 2-12';
         else set = `Mixed ${state.minFactor}-${state.maxFactor}`;
-        return `${op} · ${set}` + (state.timer.active ? ' · Timed' : '');
+        return `${op} · ${set}` + (state.timer.active ? ' · Timed' : '') + (state.answerStyle === 'choice' ? ' · Choice' : '');
+    }
+
+
+    // --- Answer style: type it or multiple choice ---
+    let pendingRange = null;
+
+    function pickSet(min, max) {
+        pendingRange = { min, max };
+        showScreen('style');
+    }
+
+    function chooseAnswerStyle(style) {
+        state.answerStyle = style;
+        startPractice(pendingRange.min, pendingRange.max);
+        const isChoice = style === 'choice';
+        ui.input.classList.toggle('hidden', isChoice);
+        ui.checkBtn.classList.toggle('hidden', isChoice);
+        document.getElementById('choice-grid').classList.toggle('hidden', !isChoice);
+    }
+
+    // Wrong options are near-misses a student might really pick
+    // (neighboring facts and off-by-one), never random numbers.
+    function buildChoices() {
+        const ans = state.answer;
+        const nums = state.problemText.match(/\d+/g).map(Number);
+        const tens = GAME_KEY === 'facts-tens';
+        let steps;
+        if (state.mode === 'multiplication') {
+            const [a, b] = nums;
+            steps = tens ? [a * 10, b, 10] : [a, b, 1];
+        } else {
+            steps = tens ? [10, 20, 30] : [1, 2, 3];
+        }
+        const pool = [];
+        steps.forEach(s => { pool.push(ans + s, ans - s); });
+        const picks = [];
+        pool.sort(() => Math.random() - 0.5).forEach(n => {
+            if (n >= 0 && n !== ans && !picks.includes(n) && picks.length < 3) picks.push(n);
+        });
+        for (let n = ans + 1; picks.length < 3; n++) if (!picks.includes(n)) picks.push(n);
+        return [ans, ...picks].sort(() => Math.random() - 0.5);
+    }
+
+    function renderChoices() {
+        const grid = document.getElementById('choice-grid');
+        grid.innerHTML = '';
+        buildChoices().forEach(n => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.textContent = n;
+            btn.onclick = () => pickChoice(n);
+            grid.appendChild(btn);
+        });
+    }
+
+    function pickChoice(n) {
+        if (state.processing || ui.input.disabled) return;
+        ui.input.value = String(n);
+        checkAnswer();
+        document.querySelectorAll('.choice-btn').forEach(btn => {
+            const v = Number(btn.textContent);
+            btn.disabled = true;
+            if (v === state.answer) btn.classList.add('right');
+            else if (v === n) btn.classList.add('wrong');
+        });
     }
 
     function factsBeginSession() {

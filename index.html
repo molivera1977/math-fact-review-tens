@@ -219,7 +219,7 @@
 
         .problem-display { font-size: 4rem; margin: 20px 0; font-weight: 800; color: #333; }
 
-        input[type="number"] {
+        #user-answer {
             font-size: 2.5rem;
             padding: 10px;
             width: 180px; 
@@ -229,7 +229,8 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        input[type="number"]:focus { border-color: var(--primary-color); }
+        #user-answer:focus { border-color: var(--primary-color); }
+        #user-answer.show-answer { border-color: var(--danger-color); color: var(--danger-color); }
 
         .feedback { height: 30px; margin-top: 15px; font-weight: bold; font-size: 1.3rem; }
         .feedback.correct { color: var(--success-color); }
@@ -397,7 +398,7 @@
         <h2 id="practice-title">Practice</h2>
         <div class="problem-display" id="problem"></div>
         
-        <input type="number" id="user-answer" placeholder="?" onkeydown="handleEnter(event)" autocomplete="off">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" id="user-answer" placeholder="?" onkeydown="handleEnter(event)" oninput="this.value = this.value.replace(/\D/g, '')" autocomplete="off">
         <br>
         
         <button id="check-btn" class="btn btn-check" onclick="checkAnswer()">Check Answer</button>
@@ -558,6 +559,7 @@
         state.processing = false;
         
         ui.input.value = '';
+        ui.input.classList.remove('show-answer');
         ui.input.focus();
         ui.feedback.innerText = '';
         ui.feedback.className = 'feedback';
@@ -600,15 +602,12 @@
         } else {
             state.score.wrong++;
             ui.scoreWrong.innerText = state.score.wrong;
-            ui.feedback.innerText = "Try again!";
+            // Wrong path: show the correct fact, then move on to a new question
+            ui.feedback.innerText = `Not quite! ${state.problemText} = ${state.answer}`;
             ui.feedback.className = "feedback incorrect";
-            ui.input.select();
-            
-            // Wrong path: UNLOCK after 0.5s so they can try again
-            // but prevents "spamming" the button
-            setTimeout(() => {
-                state.processing = false;
-            }, 500); 
+            ui.input.value = state.answer;
+            ui.input.classList.add('show-answer');
+            setTimeout(generateQuestion, 2500);
         }
     }
 

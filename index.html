@@ -452,6 +452,7 @@
     </div>
 </div>
 
+<script src="share.js?v=1"></script>
 <script>
     // --- State Management ---
     let state = {
@@ -888,6 +889,7 @@
     }
 
     function signOut() {
+        if (window.SHARE_MODE) { showScreen('welcome'); return; }   // a visitor never sees the name list
         studentName = '';
         try { sessionStorage.removeItem(LOGIN_KEY); } catch (e) {}
         document.getElementById('name-select').value = '';
@@ -1053,7 +1055,12 @@
         let saved = '';
         try { saved = sessionStorage.getItem(LOGIN_KEY) || ''; } catch (e) {}
         const known = ROSTER.some(s => s.name === saved) || saved.endsWith(' (Guest)');
-        if (saved && known) signIn(saved);
+        // Share mode (share.js): a colleague's link — no roster, no student number
+        if (window.SHARE_MODE) {
+            signIn('Visitor');
+            document.querySelectorAll('[onclick="signOut()"]').forEach(el => { el.style.display = 'none'; });
+        }
+        else if (saved && known) signIn(saved);
         else showScreen('login');
     })();
 </script>

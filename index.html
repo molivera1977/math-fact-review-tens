@@ -452,7 +452,7 @@
     </div>
 </div>
 
-<script src="share.js?v=2"></script>
+<script src="share.js?v=3"></script>
 <script>
     // --- State Management ---
     let state = {
@@ -1057,7 +1057,7 @@
         const known = ROSTER.some(s => s.name === saved) || saved.endsWith(' (Guest)');
         // Share mode (share.js): a colleague's link — no roster, no student number
         if (window.SHARE_MODE) {
-            signIn('Visitor');
+            signIn('Guest');
             document.querySelectorAll('[onclick="signOut()"]').forEach(el => { el.style.display = 'none'; });
         }
         else if (saved && known) signIn(saved);

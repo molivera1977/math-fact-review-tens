@@ -314,6 +314,9 @@
             50% { transform: translateY(-10px); }
             100% { transform: translateY(0px); }
         }
+        /* Marcos 10/14: each button names where it goes, with a short line underneath */
+        .btn-sub { display: block; font-size: 0.78em; font-weight: 600; opacity: 0.9; margin-top: 3px; }
+        .btn-home-large { max-width: 460px; }
     </style>
 </head>
 <body>
@@ -406,7 +409,7 @@
             </div>
         
         <br>
-        <button class="btn btn-nav" onclick="goHome()">Back to Menu</button>
+        <button class="btn btn-nav" onclick="goHome()">⬅️ Back to Multiply or Divide<span class="btn-sub">Pick a different one. You stay signed in.</span></button>
     </div>
 
     <div id="style-screen" class="hidden">
@@ -423,7 +426,7 @@
                 <div class="style-sub">Pick from 4 answers</div>
             </div>
         </div>
-        <button class="btn btn-nav" onclick="showScreen('selection')">Back</button>
+        <button class="btn btn-nav" onclick="showScreen('selection')">⬅️ Back to Levels<span class="btn-sub">Pick a different level.</span></button>
     </div>
 
     <div id="practice-screen" class="hidden">
@@ -446,9 +449,9 @@
         <div class="feedback" id="feedback"></div>
         <br>
         
-        <button id="finish-btn" class="btn btn-nav" onclick="endSession()">Finish Review</button>
+        <button id="finish-btn" class="btn btn-nav" onclick="endSession()">🏁 Finish Review<span class="btn-sub">See your score. Your practice is saved.</span></button>
         
-        <button id="home-btn" class="btn btn-home-large hidden" onclick="goHome()">Back to Main Menu</button>
+        <button id="home-btn" class="btn btn-home-large hidden" onclick="goHome()">📋 Back to Multiply or Divide<span class="btn-sub">Practice something else. You stay signed in.</span></button>
     </div>
 </div>
 

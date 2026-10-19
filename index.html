@@ -325,6 +325,12 @@
     <h1 id="main-title">Mr. O's Fact Review</h1>
     <h2 style="font-size: 1.1rem; color: #2980b9;">Multiples of 10 Edition</h2>
 
+    <!-- Teacher preview (Marcos 10/19: "every site should have teacher access"): only after the Teacher PIN -->
+    <div id="teacher-banner" class="hidden" style="background:#fff3cd;border:2px solid #ffc107;border-radius:10px;padding:7px 14px;margin:0 auto 12px;max-width:640px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:0.9rem;font-weight:bold;color:#856404;">
+        <span>🔍 Teacher Preview — nothing is saved or sent</span>
+        <button onclick="exitTeacherPreview()" style="background:none;border:1px solid #ffc107;border-radius:6px;padding:3px 10px;cursor:pointer;font-family:inherit;font-weight:bold;color:#856404;font-size:0.85rem;">✕ Exit</button>
+    </div>
+
     <div id="login-screen">
         <div class="mode-container login-art">
             <div class="mode-card mult" onclick="signInFirst()">
@@ -358,11 +364,14 @@
             </div>
             <div class="login-error" id="login-error"></div>
         </div>
+        <div style="text-align:right;margin-top:10px;">
+            <span onclick="promptTeacherReview()" style="display:inline-block;font-size:0.95rem;font-weight:700;color:#444;background:#f2f2f2;border:2px solid #999;border-radius:10px;padding:6px 14px;cursor:pointer;user-select:none;">🔑 Teacher Access</span>
+        </div>
     </div>
 
     <div id="welcome-screen" class="hidden">
         <div class="student-bar">
-            <span>👋 Hi, <strong id="student-name-display"></strong>! Your practice is saved for Mr. O.</span>
+            <span>👋 Hi, <strong id="student-name-display"></strong>! <span id="saved-note">Your practice is saved for Mr. O.</span></span>
             <button class="btn-switch" onclick="signOut()">Not you?</button>
         </div>
         <p style="font-size: 1.2rem; color: #666;">Select a mode to begin:</p>
@@ -822,6 +831,26 @@
     let studentName = '';
     let session = null; // { id, form, started, missed, answered, sent }
 
+    // ── Teacher Access (Marcos 10/19: "every site should have teacher access" ·
+    //    "teacher mode allows me to preview the site"). The Teacher PIN opens the site as Mr. O
+    //    with every level, and NOTHING is sent to the sheet. The sign-in is not kept, so a
+    //    reload, Exit or "Not you?" goes back to the sign-in screen.
+    const TEACHER_NAME = 'Mr. O (Teacher)';
+    let teacherPreview = false;
+
+    function promptTeacherReview() {
+        const pin = prompt('Enter Teacher PIN to preview the site:');
+        if (pin === null) return;
+        const teacher = ROSTER.find(s => s.name === TEACHER_NAME);
+        if (!teacher || pin.trim() !== teacher.id) { alert('Incorrect PIN.'); return; }
+        teacherPreview = true;
+        signIn(TEACHER_NAME);
+    }
+
+    function exitTeacherPreview() {
+        signOut();
+    }
+
     (function buildRoster() {
         const sel = document.getElementById('name-select');
         ROSTER.forEach(s => {
@@ -877,7 +906,10 @@
 
     function signIn(name) {
         studentName = name;
-        try { sessionStorage.setItem(LOGIN_KEY, name); } catch (e) {}
+        if (!teacherPreview) { try { sessionStorage.setItem(LOGIN_KEY, name); } catch (e) {} }
+        document.getElementById('teacher-banner').classList.toggle('hidden', !teacherPreview);
+        const savedNote = document.getElementById('saved-note');   // share.js replaces it in a guest view
+        if (savedNote) savedNote.textContent = teacherPreview ? 'Teacher preview: nothing is saved.' : 'Your practice is saved for Mr. O.';
         document.getElementById('student-name-display').textContent = name.includes(',')
             ? name.split(',')[1].trim() + ' ' + name.split(',')[0].trim()
             : name;
@@ -893,6 +925,8 @@
     }
 
     function signOut() {
+        teacherPreview = false;   // Exit, "Not you?" and Sign Out all end the preview
+        document.getElementById('teacher-banner').classList.add('hidden');
         if (window.SHARE_MODE) { showScreen('welcome'); return; }   // a visitor never sees the name list
         studentName = '';
         try { sessionStorage.removeItem(LOGIN_KEY); } catch (e) {}
@@ -1022,7 +1056,7 @@
     }
 
     function factsSubmit(done) {
-        if (!session || session.sent || !studentName) return;
+        if (teacherPreview || !session || session.sent || !studentName) return;   // a preview sends nothing
         const correct = state.score.correct;
         const wrong   = state.score.wrong;
         if (correct + wrong === 0) return;

@@ -646,7 +646,6 @@
 
         // LOCK immediately
         state.processing = true;
-        factsRecordAnswer(val === state.answer, val);
 
         if (val === state.answer) {
             state.score.correct++;
@@ -665,6 +664,8 @@
             ui.input.classList.add('show-answer');
             setTimeout(generateQuestion, 2500);
         }
+        // After the score moves, so the save every 5 answers counts this answer too (Marcos 10/19)
+        factsRecordAnswer(val === state.answer, val);
     }
 
     function handleEnter(e) {

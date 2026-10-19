@@ -465,6 +465,7 @@
 </div>
 
 <script src="share.js?v=3"></script>
+<script src="assign.js?v=1"></script>
 <script>
     // --- State Management ---
     let state = {
@@ -488,7 +489,8 @@
         welcome: document.getElementById('welcome-screen'),
         selection: document.getElementById('selection-screen'),
         style: document.getElementById('style-screen'),
-        practice: document.getElementById('practice-screen')
+        practice: document.getElementById('practice-screen'),
+        assign: document.getElementById('assign-screen')   // 📌 Mr. O's assignment (assign.js)
     };
     
     const ui = {
@@ -516,6 +518,7 @@
     }
 
     function goHome() {
+        if (assignment) { showAssignment(); return; }   // an open assignment comes first (assign.js)
         renderHistory();
         showScreen('welcome');
     }
@@ -606,6 +609,7 @@
             ui.timerDisplay.innerText = "No Timer";
             ui.timerDisplay.style.color = "#ccc";
         }
+        assignPracticeStarted();   // an assignment: no Finish button, its count where the timer goes
     }
 
     // --- Step 3: Game Logic ---
@@ -653,7 +657,7 @@
             ui.feedback.innerText = "Correct!";
             ui.feedback.className = "feedback correct";
             // Correct path: stays locked until new question
-            setTimeout(generateQuestion, 800);
+            setTimeout(nextQuestion, 800);
         } else {
             state.score.wrong++;
             ui.scoreWrong.innerText = state.score.wrong;
@@ -662,10 +666,17 @@
             ui.feedback.className = "feedback incorrect";
             ui.input.value = state.answer;
             ui.input.classList.add('show-answer');
-            setTimeout(generateQuestion, 2500);
+            setTimeout(nextQuestion, 2500);
         }
         // After the score moves, so the save every 5 answers counts this answer too (Marcos 10/19)
         factsRecordAnswer(val === state.answer, val);
+        assignRecordAnswer(val === state.answer, val);
+    }
+
+    // The next problem — or, once an assignment's goal is met, its finish (assign.js)
+    function nextQuestion() {
+        if (assignGoalMet()) assignFinish();
+        else generateQuestion();
     }
 
     function handleEnter(e) {
@@ -916,7 +927,7 @@
             : name;
         state.history = [];
         ui.historyList.innerHTML = '<p style="text-align: center; color: #bbb; font-style: italic;">No practice yet today.</p>';
-        showScreen('welcome');
+        assignCheck(name);   // an assignment from Mr. O shows first (assign.js)
     }
 
     function signInFirst() {
@@ -926,6 +937,7 @@
     }
 
     function signOut() {
+        assignReset();
         teacherPreview = false;   // Exit, "Not you?" and Sign Out all end the preview
         document.getElementById('teacher-banner').classList.add('hidden');
         if (window.SHARE_MODE) { showScreen('welcome'); return; }   // a visitor never sees the name list
@@ -944,7 +956,7 @@
         if (state.minFactor === state.maxFactor) set = `${state.minFactor}s`;
         else if (state.minFactor === 2 && state.maxFactor === 12) set = 'All 2-12';
         else set = `Mixed ${state.minFactor}-${state.maxFactor}`;
-        return `${op} · ${set}` + (state.timer.active ? ' · Timed' : '') + (state.answerStyle === 'choice' ? ' · Choice' : '');
+        return `${op} · ${set}` + (state.timer.active ? ' · Timed' : '') + (state.answerStyle === 'choice' ? ' · Choice' : '') + (assignRun ? ' · Assigned' : '');
     }
 
 

@@ -11,15 +11,18 @@
    THE SHEET — the facts-assign tab, one row per student per assignment, for all three sites. It is
    written with the sheet's usual 'submit', so the Apps Script did not change:
      sessionId  'FA-<ms assigned>-<n>'   one per student, so each student's row is updated on its own
-     form       'facts-review · Mult · 6s · Get 20 right · Type It'
-                (site · operation · set · goal · Type It | Choice | Either), or 'None' = taken away
+     form       'facts-review · Mult · 6s · Get 20 right · Type It · Stop after 40 tries'
+                (site · operation · set · goal · Type It | Choice | Either · try limit), or 'None' = taken away.
+                The try limit (Marcos 10/19 evening: "build the try limit for typed, multiple choice and
+                student's choice") ends the assignment after that many answers even if the goal is not met,
+                so a student who doesn't know the set yet is never stuck. A row without one has no limit.
      score      the ms it was assigned. The sheet's leaderboard read gives back ONE row per student,
                 the highest score — so a student's newest row is their assignment. maxScore lifts the
                 sheet's 99999 cap.
      correct · total · wrongQuestions · elapsed   their progress, written back by this page every
                 5 answers and at the end. The sheet stores the score in Correct when Correct is 0,
                 so a Correct equal to the score means 0.
-     done       true once they get the goal right (this page), or on a 'None' row (Mr. O)
+     done       true once they get the goal right or reach the try limit (this page), or on a 'None' row (Mr. O)
 
    At sign-in the student waits for that read (up to ASSIGN_WAIT_MS). If the sheet cannot be reached,
    the assignment this device saw last is used; a device that saw none lets the student in.
@@ -77,6 +80,7 @@ let assignTurn = 0;      // which sign-in a sheet read belongs to
             border-radius: 50px; padding: 6px 14px; font-size: 1rem; font-weight: 700; color: #7a5c00; cursor: pointer; font-family: inherit; }
         @media (max-width: 600px) { .assign-listen { position: static; display: block; margin: 0 auto 12px; } }
         body.assign-on #style-screen .btn-nav { display: none; }   /* no way back to the levels during an assignment */
+        #practice-screen .feedback.final { height: auto; min-height: 30px; }   /* the end message may take two lines */
     `;
     document.head.appendChild(css);
 
@@ -105,12 +109,13 @@ let assignTurn = 0;      // which sign-in a sheet read belongs to
         </section>`;
     document.querySelector('.container').appendChild(screen);
 
-    // a 🔊 reads its own line (Marcos 10/8: "speaker icons so the whole page doesn't need to be read aloud")
-    screen.addEventListener('click', e => {
+    // a 🔊 reads its own line (Marcos 10/8: "speaker icons so the whole page doesn't need to be read aloud"),
+    // on the banner and on the end message
+    document.addEventListener('click', e => {
         const spk = e.target.closest('.assign-say');
         if (spk) assignSay(spk.parentElement.dataset.say);
     });
-    screen.addEventListener('keydown', e => {
+    document.addEventListener('keydown', e => {
         const spk = e.target.closest('.assign-say');
         if (spk && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); assignSay(spk.parentElement.dataset.say); }
     });
@@ -151,13 +156,14 @@ function assignLine(el, text, say = text) {
 /* One sheet row → an assignment, or null. A row this page cannot read never locks a student out. */
 function assignParse(row) {
     if (!row || !row.sessionId || typeof row.form !== 'string') return null;
-    const [site, op, set, goal, how] = row.form.split('·').map(p => p.trim());
+    const [site, op, set, goal, how, stopAfter] = row.form.split('·').map(p => p.trim());
     const info = ASSIGN_SITES[site];
     if (!info || !info.ops[op] || !ASSIGN_STYLES[how]) return null;
     const one   = /^(\d+)s$/.exec(set || '');
     const range = /^(?:Mixed|All) (\d+)-(\d+)$/.exec(set || '');
     const want  = /^Get (\d+) right$/.exec(goal || '');
-    if ((!one && !range) || !want) return null;
+    const limit = /^Stop after (\d+) tries$/.exec(stopAfter || '');
+    if ((!one && !range) || !want || (stopAfter && !limit)) return null;
     const min = Number(one ? one[1] : range[1]);
     const max = Number(one ? one[1] : range[2]);
     if (!(min >= 1 && min <= max && max <= 12) || !(Number(want[1]) >= 1)) return null;
@@ -166,6 +172,7 @@ function assignParse(row) {
     return {
         id: String(row.sessionId), form: row.form, key, site, op, set, min, max, how,
         goal:     Number(want[1]),
+        limit:    limit ? Number(limit[1]) : 0,   // 0 = no try limit
         right,
         answered: Math.max(right, Number(row.total) || 0),
         missed:   String(row.wrongQuestions || '').split(' | ').filter(Boolean),
@@ -174,7 +181,8 @@ function assignParse(row) {
     };
 }
 
-const assignFinished = a => a.done || a.right >= a.goal;
+const assignStopped  = a => a.limit > 0 && a.answered >= a.limit && a.right < a.goal;   // the try limit, not the goal
+const assignFinished = a => a.done || a.right >= a.goal || assignStopped(a);
 
 /* The sheet's row and this device's copy of the same assignment: the most progress wins. */
 function assignMerge(fromSheet, saved) {
@@ -193,7 +201,7 @@ function assignSaved(name) {
     try {
         const a = JSON.parse(localStorage.getItem(ASSIGN_CACHE + ':' + name) || 'null');
         const ok = a && typeof a.id === 'string' && ASSIGN_SITES[a.site] && ASSIGN_SITES[a.site].ops[a.op] && ASSIGN_STYLES[a.how]
-            && a.goal >= 1 && Number.isFinite(a.right) && Number.isFinite(a.answered) && Array.isArray(a.missed);
+            && a.goal >= 1 && Number.isFinite(a.limit) && Number.isFinite(a.right) && Number.isFinite(a.answered) && Array.isArray(a.missed);
         return ok ? a : null;
     } catch (e) { return null; }
 }
@@ -362,16 +370,19 @@ function assignRecordAnswer(isCorrect, typed) {
 
 const assignGoalMet = () => !!(assignRun && assignment && assignFinished(assignment));
 
-/* The goal is met: save it as done, show the score, and open the whole site again. */
+/* The goal is met, or the try limit is reached: save it as done, say which, and open the whole site again. */
 function assignFinish() {
     const done = { ...assignment, done: true, elapsed: assignRun.baseElapsed + factsActiveSeconds() };
+    const stopped = assignStopped(done);
     assignSave(studentName, done);
     assignPost(done);
     assignment = null;
     assignRun = null;
     document.body.classList.remove('assign-on');
     endSession();
-    ui.feedback.innerText = `🎉 Assignment done! You got ${done.goal} right.`;
+    assignLine(ui.feedback, stopped
+        ? `👍 You practiced ${done.answered} problems. Mr. O will help you with the rest.`
+        : `🎉 Assignment done! You got ${done.goal} right.`);
 }
 
 // Closing the tab mid-assignment keeps what they did (this device has it already; this is the sheet).

@@ -140,7 +140,7 @@ function assignSay(text) {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'en-US';
-    u.rate = 0.92;   // a read the student asks for (the class sites' rate)
+    u.rate = 0.82;   // a read the student asks for (the class sites' rate, Marcos 10/26)
     speechSynthesis.speak(u);
 }
 
